@@ -12,7 +12,6 @@ from google.adk.tools.agent_tool import AgentTool
 from . import prompt
 from .sub_agents.task_decomposer.agent import task_decomposer_agent
 from .sub_agents.task_monitor.agent import task_monitor_agent
-from .sub_agents.task_executor.agent import task_executor_agent
 
 MODEL = "gemini-2.0-flash"
 
@@ -23,14 +22,13 @@ intelligent_task_coordinator = LlmAgent(
     description=(
         "智能任务处理协调器，负责判断任务复杂度并分发给合适的处理器。"
         "对于简单任务直接回答，对于复杂任务调用任务拆解子agent进行处理，"
-        "对于任务监控调用监控agent，对于任务执行调用执行agent。"
+        "对于任务监控调用监控agent自动执行任务。"
     ),
     instruction=prompt.MAIN_AGENT_PROMPT,
     output_key="task_analysis_result",
     tools=[
         AgentTool(agent=task_decomposer_agent),
         AgentTool(agent=task_monitor_agent),
-        AgentTool(agent=task_executor_agent),
     ],
 )
 

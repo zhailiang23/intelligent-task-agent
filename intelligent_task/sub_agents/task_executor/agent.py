@@ -30,19 +30,32 @@ def update_task_execution_status(
         if hasattr(part, 'text') and part.text is not None:
             response_text += part.text
     
-    # 检查是否包含任务完成标识
-    if "任务完成" in response_text or "任务已完成" in response_text or "✅" in response_text:
-        # 获取当前正在执行的任务ID
-        current_task_id = callback_context.state.get("current_executing_task_id")
-        task_list = callback_context.state.get("confirmed_task_list", [])
+    # 首先设置当前执行的任务ID（如果还没设置）
+    task_list = callback_context.state.get("confirmed_task_list", [])
+    current_task_id = callback_context.state.get("current_executing_task_id")
+    
+    if not current_task_id and task_list:
+        # 找到第一个待执行的任务并设置为当前执行任务
+        for task in task_list:
+            if task.get("status") == "pending":
+                callback_context.state["current_executing_task_id"] = task["id"]
+                current_task_id = task["id"]
+                print(f"开始执行任务 {current_task_id}: {task.get('title', '')}")
+                break
+    
+    # 检查是否包含任务完成或失败标识
+    if current_task_id and task_list:
+        task_completed = "任务完成" in response_text or "任务已完成" in response_text or "✅" in response_text
+        task_failed = "无法完成任务" in response_text or "不能完成" in response_text or "失败" in response_text
         
-        if current_task_id and task_list:
+        if task_completed or task_failed:
             # 更新对应任务的状态
             for task in task_list:
                 if task["id"] == current_task_id:
-                    task["status"] = "completed"
+                    task["status"] = "completed" if task_completed else "failed"
                     task["execution_result"] = response_text[:500]  # 保存前500字符的执行结果
-                    print(f"任务 {current_task_id} 执行完成")
+                    status_text = "执行完成" if task_completed else "执行失败"
+                    print(f"任务 {current_task_id} {status_text}")
                     break
             
             # 更新session.state
@@ -147,37 +160,66 @@ def create_mcp_toolsets():
 
 def get_task_executor_instruction(context) -> str:
     """
-    动态生成任务执行指令
+    动态生成任务执行指令，包含前面步骤的上下文
     """
-    current_task_id = context.state.get("current_executing_task_id")
+    # 从task_monitor传递的当前任务信息中获取任务
+    # 这里我们需要从用户的调用上下文中解析当前任务
     task_list = context.state.get("confirmed_task_list", [])
     
-    if not current_task_id or not task_list:
-        return "没有找到需要执行的任务。请先指定要执行的任务ID。"
+    if not task_list:
+        return "没有找到需要执行的任务列表。"
     
-    # 找到要执行的任务
+    # 找到第一个待执行的任务
     current_task = None
     for task in task_list:
-        if task["id"] == current_task_id:
+        if task.get("status") == "pending":
             current_task = task
             break
     
     if not current_task:
-        return f"未找到ID为 {current_task_id} 的任务。"
+        return "没有找到待执行的任务。"
+    
+    # 注意：在指令函数中不能修改只读的context.state
+    # current_executing_task_id 将在回调函数中设置
+    
+    # 获取前面步骤的执行结果作为上下文
+    execute_results = context.state.get("execute_result", [])
+    previous_context = ""
+    if execute_results:
+        previous_context = "\\n\\n**前面步骤的执行结果上下文**：\\n"
+        for i, result in enumerate(execute_results, 1):
+            status_icon = "✅" if result.get("status") == "completed" else "❌"
+            previous_context += f"步骤{i} - {result.get('task_title', '')} {status_icon}:\\n"
+            previous_context += f"执行结果: {result.get('execution_result', '')[:300]}...\\n\\n"
     
     instruction = f"""现在需要执行以下任务：
 
-**任务标题**: {current_task['title']}
-**任务描述**: {current_task['description']}
-**任务ID**: {current_task['id']}
+**当前任务**:
+- 任务标题: {current_task['title']}
+- 任务描述: {current_task['description']}
+- 任务ID: {current_task['id']}
 
+{previous_context}
+
+**执行要求**：
 请按照Think-Act-Observe的循环模式来执行这个任务：
 
-1. **思考阶段**：深入分析任务要求，制定执行策略
-2. **行动阶段**：使用合适的工具执行具体操作
-3. **观察阶段**：评估执行结果，决定下一步
+1. **🤔 思考阶段**：
+   - 仔细分析当前任务的具体要求
+   - 考虑前面步骤的执行结果和上下文
+   - 制定合适的执行策略和步骤
 
-你可以使用以下工具：
+2. **🚀 行动阶段**：
+   - 使用合适的工具执行具体操作
+   - 根据需要搜索信息、处理文件等
+   - 如果需要用户补充信息，请直接询问
+
+3. **👀 观察阶段**：
+   - 评估执行结果是否满足任务要求
+   - 判断任务是否已经完成
+   - 决定是否需要继续循环
+
+**可用工具**：
 - braveSearch: 搜索网络信息
 - fetch: 获取网页内容
 - fileSystem: 文件操作
@@ -185,7 +227,10 @@ def get_task_executor_instruction(context) -> str:
 - office_word: Word文档处理
 - office_excel: Excel表格处理
 
-请开始执行任务，如果遇到需要用户补充的信息，请直接询问用户。如果无法完成任务，请明确说明原因。"""
+**重要说明**：
+- 如果你判断无法完成这个任务，请明确说明"无法完成任务"并详细解释原因
+- 如果任务完成，请明确说明"任务已完成"并总结执行结果
+- 请充分利用前面步骤的执行结果作为当前任务的输入和参考"""
     
     return instruction
 
