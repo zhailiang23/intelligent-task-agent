@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "intelligent-task-agent"
+version = "1.0.0"
+description = "重构后的智能任务处理Agent - 采用标准ADK多agent架构"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+google-adk = "^1.0.0"
+python-dotenv = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
