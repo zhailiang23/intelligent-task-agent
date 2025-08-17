@@ -28,8 +28,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# 虚拟环境
+# 环境变量和敏感信息
 .env
+.env.local
+.env.*.local
+
+# 虚拟环境
 .venv
 env/
 venv/
