@@ -14,6 +14,14 @@ pip install -e .
 
 # 安装MCP工具（必需）
 npm install -g @modelcontextprotocol/server-sequential-thinking
+
+# 安装task_executor需要的MCP工具
+npm install -g @modelcontextprotocol/server-brave-search
+npm install -g @modelcontextprotocol/server-fetch
+npm install -g @modelcontextprotocol/server-filesystem
+npm install -g @modelcontextprotocol/server-time
+npm install -g @modelcontextprotocol/server-office-word
+npm install -g @modelcontextprotocol/server-office-excel
 ```
 
 ## 开发和测试命令
@@ -24,6 +32,9 @@ python test_refactored_system.py
 
 # 运行任务监控修复测试
 python test_task_monitor_fix.py
+
+# 测试任务执行agent
+python test_task_executor.py
 
 # 测试连接
 python test_connection.py
@@ -49,6 +60,7 @@ adk web --no-reload
 2. **子Agents** (`intelligent_task/sub_agents/`)
    - `task_decomposer_agent`: 复杂任务拆解器，使用Sequential Thinking MCP工具
    - `task_monitor_agent`: 任务监控器，逐个询问用户任务完成状态
+   - `task_executor_agent`: 任务执行器，基于Think-Act-Observe模式执行具体任务
 
 3. **状态管理**
    - 使用session.state保存任务列表和状态
@@ -61,8 +73,11 @@ adk web --no-reload
 **回调函数**: 
 - `save_confirmed_tasks_to_state()`: 自动提取和保存任务拆解结果
 - `process_user_response_callback()`: 处理用户对任务完成状态的回答
+- `update_task_execution_status()`: 更新任务执行状态和结果
 
-**MCP集成**: task_decomposer_agent集成Sequential Thinking MCP工具进行深度思考
+**MCP集成**: 
+- task_decomposer_agent集成Sequential Thinking MCP工具进行深度思考
+- task_executor_agent集成多种MCP工具：braveSearch, fetch, fileSystem, time, office_word, office_excel
 
 ## 工作流程
 
@@ -72,6 +87,7 @@ adk web --no-reload
    - 简单任务 → 直接回答
    - 复杂任务 → task_decomposer_agent拆解
    - 监控请求 → task_monitor_agent询问状态
+   - 执行请求 → task_executor_agent执行具体任务
 4. **状态更新**: 通过回调函数自动更新session.state
 
 ## 文件结构要点
@@ -87,9 +103,12 @@ intelligent_task/
     ├── task_decomposer/        # 任务拆解子agent
     │   ├── agent.py            # 包含MCP工具集成和状态保存回调
     │   └── prompt.py           # Sequential Thinking提示词
-    └── task_monitor/           # 任务监控子agent
-        ├── agent.py            # 包含用户交互和状态更新逻辑
-        └── prompt.py           # 任务监控提示词
+    ├── task_monitor/           # 任务监控子agent
+    │   ├── agent.py            # 包含用户交互和状态更新逻辑
+    │   └── prompt.py           # 任务监控提示词
+    └── task_executor/          # 任务执行子agent
+        ├── agent.py            # Think-Act-Observe执行逻辑，集成多种MCP工具
+        └── prompt.py           # 任务执行提示词
 ```
 
 ## 调试和故障排除
@@ -98,6 +117,8 @@ intelligent_task/
 - **导入错误**: 确保所有`__init__.py`文件正确导出agents
 - **状态更新失败**: 检查callback函数中的状态操作，避免在只读context中修改状态
 - **MCP工具连接**: 确保Sequential Thinking MCP服务正确安装和配置
+- **task_executor工具失败**: 检查各种MCP工具服务器是否正确安装，如braveSearch, fetch等
+- **任务执行状态**: 确保current_executing_task_id在session.state中正确设置
 
 ## ADK特定注意事项
 
